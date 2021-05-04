@@ -1,1 +1,1 @@
-Most networks focus on optimizing the architecture and the operators. Model scaling applies a compound depth, width, and resolution scaling to achieve competitive accuracy while being respectful of resources.
+Most networks focus on optimizing the architecture and the operators. Model scaling applies a compound depth, width, and resolution scaling to achieve competitive accuracy while being respectful of avalible resources measured as FLOPS.
