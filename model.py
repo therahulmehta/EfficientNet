@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import math
 
-# foundational model [expandratio, channels, repeats, stride, kernal_size]
+# foundational model [expandratio, channels, repeats, stride, kernel_size]
 # taken verbatim from paper MobileNet  
 model_primatives = [
     [1, 16, 1, 1, 3],
@@ -19,7 +19,7 @@ model_primatives = [
 # depth = alpha ** phi
 # structure: (phi, res, drop rate) 
 phi_values = {
-    "b0": (0, 224, 0.2), 
+    "b0": (0, 224, 0.2),
     "b1": (0.5, 240, 0.2),
     "b2": (1, 260, 0.3),
     "b3": (2, 300, 0.3),
@@ -32,12 +32,12 @@ phi_values = {
 
 class CNNBlock(nn.Module):
     #depth-wise conv configuration, groups retains the # channels of the input. 
-    def __init__(self, in_channels, out_channels, kernal_size, stride, padding, groups=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, groups=1):
         super(CNNBlock, self).__init__()
         self.cnn = nn.Conv2d(
             in_channels,
             out_channels,
-            kernal_size, 
+            kernel_size, 
             stride,
             padding, 
             groups=groups,
@@ -69,10 +69,12 @@ class SqueezeExcitation(nn.Module):
 # MobileNetV2
 class InvertedResidualBlock(nn.Module):
     def __init__(
+        self,
         in_channels,
         out_channels,
-        kernal_size, 
+        kernel_size,
         stride,
+        padding,
         expand_ratio,
         reduction=4, #squeeze
         survial_p = 0.8, #Stochastic depth
@@ -86,34 +88,89 @@ class InvertedResidualBlock(nn.Module):
         
         if self.expand: 
             self.expand_conv = CNNBlock(
-                in_channels, hidden_dim, kernal_size=1, stride=1, padding=1,
+                in_channels, hidden_dim, kernel_size=1, stride=1, padding=1,
             )
 
-        self.conv = nn.Sequential(
-            CNNBlock(
-                hidden_dim, hidden_dim, kernal_size, stride, padding, groups=hidden_dim, 
-            ),        
-            SqueezeExcitation(hidden_dim, reduced_dim),
-            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels), 
-        )
-    # removes layer via skipping (not while training)    
-    def stochastic_depth(self, x): 
-        if not self.training: 
-            return x
-        
-        binary_tensor = torch.rand(x.shape[0], 1,1,1, device=x.device) < self.survial_p
-        return x.div(x, self.survial_p) * binary_tensor #directly from stochastic depth paper 
+        self.conv = nn.Sequential(def test():
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    version = "b0"
+    phi, res, drop_rate = phi_values[version]
+    num_examples, num_classes = 4, 10
+    x = torch.randn((num_examples, 3, res, res)).to(device)
+    model = EfficientNet(
+        version=version,
+        num_classes=num_classes,
+    ).to(device)
 
+    print(model(x).shape) # (num examples, num classes)
 
-    def forward(self, inputs):
-        x = self. expand_conv(inputs) if self.expand else inputs
-
-        if self.use_residual: 
-            return self.stochastic_depth(self.conv(x)) + inputs
-        else: 
+test()
             return self.conv(x)
         
 
 class EfficientNet(nn.Module):
-    pass
+    def __init__(self, version, num_classes): 
+        super(EfficientNet, self).__init__()
+        depth_factor, width_factor, dropout_rate = self.calculate_factors(version)
+        final_channels = math.ceil(1280 * width_factor)
+        self.pool = nn.AdaptiveAvgPool2d(1) #adaptive average pool
+        self.features = self.create_features(depth_factor, width_factor, final_channels)
+        self.classifier = nn.Sequential(
+            nn.Dropout(dropout_rate), 
+            nn.Linear(final_channels, num_classes),
+        )
+
+    def calculate_factors(self,version, alpha=1.2, beta=1.1):
+        phi, res, drop_rate = phi_values[version]
+        width_factor = beta**phi #channels increased
+        depth_factor = alpha** phi #layers increased
+        return depth_factor, width_factor, drop_rate
+
+    def create_features(self, depth_factor, width_factor, final_channels):
+        channels = int(32*width_factor)
+        features = [CNNBlock(3, channels, 3, stride=2, padding=1)]
+        in_channels = channels
+
+        for expand_ratio, channels, repeats, stride, kernel_size in model_primatives : 
+            out_channels = 4*math.ceil(int(channels*width_factor)/4)
+            layers_repeats=math.ceil(repeats*depth_factor)
+
+            for layer in range(layers_repeats):
+                features.append(
+                    InvertedResidualBlock(
+                        in_channels, 
+                        out_channels,
+                        expand_ratio=expand_ratio,
+                        stride = stride if layer == 0 else 1, 
+                        kernel_size = kernel_size, 
+                        padding = kernel_size//2, #k = 1 pad = 0, k=3 pad=1, k=5 pad=2 done via integer division 
+                    )
+                )
+                in_channels = out_channels
+
+            features.append(
+                CNNBlock(in_channels, final_channels, kernel_size=1, stride=1, padding=0)
+            )
+
+            return nn.Sequential(*features)
+
+    def forward(self, x): 
+        x= self.pool(self.features(x))
+        return self.classifier(x.view(x.shape[0], -1))
+    
+
+
+def test():
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    version = "b0"
+    phi, res, drop_rate = phi_values[version]
+    num_examples, num_classes = 4, 10
+    x = torch.randn((num_examples, 3, res, res)).to(device)
+    model = EfficientNet(
+        version=version,
+        num_classes=num_classes,
+    ).to(device)
+
+    print(model(x).shape) # (num examples, num classes)
+
+test()
