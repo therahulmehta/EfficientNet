@@ -1,8 +1,9 @@
 Motivation for EfficientNet
 ----------------------------
-Many networks focus on optimizing the architecture and the operators in order to achieve target performance. 
-While this works, it doesn't concern itself with the practicality of deploying said network. 
-Instead of creating a new network model scaling applies a compound depth, width, and resolution scaling to exisitng model in order to achieve competitive accuracy while being respectful of available resources measured as FLOPS. 
+Many networks focus on optimizing the architecture and the operators in order to achieve target performance. While this method does work it doesn't concern itself with the practicality of deploying said network. 
+
+Meanwhile, model scaling applies a compound scaling to existing models in order to achieve competitive accuracy while being respectful of resource limitations (measured as FLOPS).
+
 
 To-do
 -----
