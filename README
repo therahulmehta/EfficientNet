@@ -1,1 +1,11 @@
-Most networks focus on optimizing the architecture and the operators. Model scaling applies a compound depth, width, and resolution scaling to achieve competitive accuracy while being respectful of avalible resources measured as FLOPS.
+Motivation for EfficientNet
+----------------------------
+Many networks focus on optimizing the architecture and the operators in order to achieve target performance. 
+While this works, it doesn't concern itself with the practicality of deploying said network. 
+Instead of creating a new network model scaling applies a compound depth, width, and resolution scaling to exisitng model in order to achieve competitive accuracy while being respectful of available resources measured as FLOPS. 
+
+To-do
+-----
+- Remove static model architecture and priors (phi)
+- Add more robust outputs for probing model performance
+- Add grid search for parameter discovery dynamically 
