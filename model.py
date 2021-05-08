@@ -15,7 +15,7 @@ model_primatives = [
     [6, 320, 1, 1, 3],
 ]
 
-# synthetic values for selecting reasource avaliblity for model scaling
+# Synthetic values for selecting reasource avaliblity for model scaling. Calculated values used to reflect paper implementation.  
 # depth = alpha ** phi
 # structure: (phi, res, drop rate) 
 phi_values = {
@@ -41,6 +41,7 @@ class CNNBlock(nn.Module):
             stride,
             padding, 
             groups=groups,
+            bias=False, #since we're using batch norm 
         )
         self.bn = nn.BatchNorm2d(out_channels)
         self.silu = nn.SiLU() 
@@ -67,7 +68,52 @@ class SqueezeExcitation(nn.Module):
 
 # MobileNetV2
 class InvertedResidualBlock(nn.Module):
-    pass
+    def __init__(
+        in_channels,
+        out_channels,
+        kernal_size, 
+        stride,
+        expand_ratio,
+        reduction=4, #squeeze
+        survial_p = 0.8, #Stochastic depth
+    ):
+        super(InvertedResidualBlock, self).__init__()
+        self.survial_p = 0.8
+        self.use_residual = in_channels == out_channels and stride == 1 # need to verify if we can use skip connection / addition
+        hidden_dim = in_channels * expand_ratio
+        self.expand = in_channels != hidden_dim
+        reduced_dim = int(in_channels / reduction)
+        
+        if self.expand: 
+            self.expand_conv = CNNBlock(
+                in_channels, hidden_dim, kernal_size=1, stride=1, padding=1,
+            )
+
+        self.conv = nn.Sequential(
+            CNNBlock(
+                hidden_dim, hidden_dim, kernal_size, stride, padding, groups=hidden_dim, 
+            ),        
+            SqueezeExcitation(hidden_dim, reduced_dim),
+            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels), 
+        )
+    # removes layer via skipping (not while training)    
+    def stochastic_depth(self, x): 
+        if not self.training: 
+            return x
+        
+        binary_tensor = torch.rand(x.shape[0], 1,1,1, device=x.device) < self.survial_p
+        return x.div(x, self.survial_p) * binary_tensor #directly from stochastic depth paper 
+
+
+    def forward(self, inputs):
+        x = self. expand_conv(inputs) if self.expand else inputs
+
+        if self.use_residual: 
+            return self.stochastic_depth(self.conv(x)) + inputs
+        else: 
+            return self.conv(x)
+        
 
 class EfficientNet(nn.Module):
     pass
