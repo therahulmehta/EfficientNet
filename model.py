@@ -91,20 +91,30 @@ class InvertedResidualBlock(nn.Module):
                 in_channels, hidden_dim, kernel_size=1, stride=1, padding=1,
             )
 
-        self.conv = nn.Sequential(def test():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    version = "b0"
-    phi, res, drop_rate = phi_values[version]
-    num_examples, num_classes = 4, 10
-    x = torch.randn((num_examples, 3, res, res)).to(device)
-    model = EfficientNet(
-        version=version,
-        num_classes=num_classes,
-    ).to(device)
+        self.conv = nn.Sequential(
+            CNNBlock(
+                hidden_dim, hidden_dim, kernel_size, stride, padding, groups=hidden_dim, 
+            ),        
+            SqueezeExcitation(hidden_dim, reduced_dim),
+            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels), 
+        )
 
-    print(model(x).shape) # (num examples, num classes)
+    # removes layer via skipping (not while training)    
+    def stochastic_depth(self, x): 
+        if not self.training: 
+            return x
+        
+        binary_tensor = torch.rand(x.shape[0], 1,1,1, device=x.device) < self.survial_p
+        return x.div(x, self.survial_p) * binary_tensor #directly from stochastic depth paper 
 
-test()
+
+    def forward(self, inputs):
+        x = self. expand_conv(inputs) if self.expand else inputs
+
+        if self.use_residual: 
+            return self.stochastic_depth(self.conv(x)) + inputs
+        else: 
             return self.conv(x)
         
 
